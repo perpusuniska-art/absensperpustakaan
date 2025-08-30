@@ -1,0 +1,1877 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Absen Perpustakaan UNSIAK MAB</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #10b981;
+            --secondary-color: #3b82f6;
+            --header-bg: rgba(255, 255, 255, 0.1);
+            --logo-emoji: '📚';
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+        }
+        .card-gradient {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
+        }
+        .custom-header {
+            background: var(--header-bg);
+            backdrop-filter: blur(10px);
+        }
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+        }
+        .print-only { display: none; }
+        .loading-overlay {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+        }
+        /* Android optimizations */
+        @media screen and (max-width: 768px) {
+            .container { padding-left: 1rem; padding-right: 1rem; }
+            .tab-btn { font-size: 0.875rem; padding: 0.75rem 0.5rem; }
+            .grid { gap: 1rem; }
+            input, select, textarea { font-size: 16px; } /* Prevents zoom on iOS */
+        }
+        /* Color picker styles */
+        .color-picker {
+            width: 50px;
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .logo-preview {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            background: white;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body class="min-h-screen gradient-bg">
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 loading-overlay flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-6 text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p id="loadingText" class="text-gray-700 font-semibold">Memuat data...</p>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="custom-header shadow-lg">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div id="logoContainer" class="logo-preview">
+                        <span id="logoEmoji">📚</span>
+                    </div>
+                    <div>
+                        <h1 id="websiteTitle" class="text-2xl font-bold text-white">Perpustakaan UNSIAK MAB</h1>
+                        <p id="websiteSubtitle" class="text-white/80 text-sm">Sistem Absensi Pengunjung</p>
+                    </div>
+                </div>
+                <div class="text-white text-right">
+                    <div id="currentTime" class="text-lg font-semibold"></div>
+                    <div id="currentDate" class="text-sm opacity-80"></div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Notification -->
+    <div id="notification" class="fixed top-4 right-4 z-40 hidden">
+        <div class="bg-white rounded-lg shadow-lg p-4 max-w-sm">
+            <div class="flex items-center">
+                <div id="notificationIcon" class="mr-3 text-2xl"></div>
+                <div>
+                    <p id="notificationText" class="text-gray-800 font-semibold"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- Navigation Tabs -->
+        <div class="bg-white/20 backdrop-blur-md rounded-xl p-3 mb-8 no-print">
+            <!-- Main Navigation Tabs - Mobile: 2x2 Grid, Desktop: Horizontal -->
+            <div class="grid grid-cols-2 sm:flex gap-2 mb-3 sm:mb-0">
+                <button onclick="switchTab('mahasiswa')" id="tab-mahasiswa" class="tab-btn active py-3 px-2 sm:px-4 rounded-lg font-semibold transition-all text-center sm:flex-1">
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
+                        <span class="text-lg sm:text-base">👨‍🎓</span>
+                        <span class="text-xs sm:text-sm font-medium">Mahasiswa</span>
+                    </div>
+                </button>
+                <button onclick="switchTab('karyawan')" id="tab-karyawan" class="tab-btn py-3 px-2 sm:px-4 rounded-lg font-semibold transition-all text-center sm:flex-1">
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
+                        <span class="text-lg sm:text-base">👨‍💼</span>
+                        <span class="text-xs sm:text-sm font-medium">Karyawan</span>
+                    </div>
+                </button>
+                <button onclick="switchTab('pengunjung')" id="tab-pengunjung" class="tab-btn py-3 px-2 sm:px-4 rounded-lg font-semibold transition-all text-center sm:flex-1">
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
+                        <span class="text-lg sm:text-base">👥</span>
+                        <span class="text-xs sm:text-sm font-medium">Pengunjung</span>
+                    </div>
+                </button>
+                <button onclick="switchTab('laporan')" id="tab-laporan" class="tab-btn py-3 px-2 sm:px-4 rounded-lg font-semibold transition-all text-center sm:flex-1">
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
+                        <span class="text-lg sm:text-base">📊</span>
+                        <span class="text-xs sm:text-sm font-medium">Laporan</span>
+                    </div>
+                </button>
+            </div>
+            
+            <!-- Action Buttons - Mobile: Full width row, Desktop: Right aligned -->
+            <div class="grid grid-cols-2 sm:flex gap-2 sm:justify-end">
+                <button onclick="refreshData()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-semibold transition-all text-center">
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
+                        <span class="text-lg sm:text-base">🔄</span>
+                        <span class="text-xs sm:text-sm font-medium">Refresh</span>
+                    </div>
+                </button>
+                <button onclick="showImportModal()" class="bg-purple-500 hover:bg-purple-600 text-white px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-semibold transition-all text-center">
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
+                        <span class="text-lg sm:text-base">📥</span>
+                        <span class="text-xs sm:text-sm font-medium">Import</span>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- Settings Button (Bottom Right) -->
+        <div class="fixed bottom-4 right-4 z-30 no-print">
+            <button onclick="showSettings()" class="bg-gray-600 hover:bg-gray-700 text-white p-3 rounded-full shadow-lg transition-all">
+                ⚙️
+            </button>
+        </div>
+
+        <!-- Mahasiswa Tab -->
+        <div id="content-mahasiswa" class="tab-content">
+            <div class="grid lg:grid-cols-2 gap-8">
+                <!-- Form Absen Mahasiswa -->
+                <div class="bg-white/20 backdrop-blur-md rounded-xl p-6">
+                    <h2 class="text-2xl font-bold text-white mb-6 flex items-center">
+                        👨‍🎓 <span class="ml-2">Absen Mahasiswa</span>
+                    </h2>
+                    <form id="mahasiswaForm" class="space-y-4">
+                        <div>
+                            <label class="block text-white font-semibold mb-2">NIM</label>
+                            <input type="text" id="nim" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" placeholder="Masukkan NIM" required>
+                            <div id="mahasiswaInfo" class="mt-2 p-3 bg-green-100 rounded-lg hidden">
+                                <p class="text-green-800 font-semibold" id="mahasiswaNama"></p>
+                                <p class="text-green-600 text-sm" id="mahasiswaProdi"></p>
+                                <p class="text-green-600 text-sm" id="mahasiswaFakultas"></p>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-white font-semibold mb-2">Keperluan</label>
+                            <select id="keperluan" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" required>
+                                <option value="">Pilih Keperluan</option>
+                                <option value="Membaca Buku">Membaca Buku</option>
+                                <option value="Meminjam Buku">Meminjam Buku</option>
+                                <option value="Mengembalikan Buku">Mengembalikan Buku</option>
+                                <option value="Mengerjakan Tugas">Mengerjakan Tugas</option>
+                                <option value="Penelitian">Penelitian</option>
+                                <option value="Lainnya">Lainnya</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold py-3 px-6 rounded-lg hover:from-green-600 hover:to-blue-600 transition-all transform hover:scale-105">
+                            ✅ Absen Masuk
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Daftar Absen Hari Ini -->
+                <div class="bg-white/20 backdrop-blur-md rounded-xl p-6">
+                    <h3 class="text-xl font-bold text-white mb-4">📋 Absen Hari Ini</h3>
+                    <div class="bg-white/10 rounded-lg p-4 max-h-96 overflow-y-auto">
+                        <div id="absenHariIni" class="space-y-2">
+                            <p class="text-white/70 text-center">Belum ada absen hari ini</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Karyawan Tab -->
+        <div id="content-karyawan" class="tab-content hidden">
+            <div class="max-w-md mx-auto bg-white/20 backdrop-blur-md rounded-xl p-6">
+                <h2 class="text-2xl font-bold text-white mb-6 flex items-center justify-center">
+                    👨‍💼 <span class="ml-2">Absen Karyawan</span>
+                </h2>
+                <form id="karyawanForm" class="space-y-4">
+                    <div>
+                        <label class="block text-white font-semibold mb-2">Nama Lengkap</label>
+                        <input type="text" id="namaKaryawan" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" placeholder="Masukkan nama lengkap" required>
+                    </div>
+                    <div>
+                        <label class="block text-white font-semibold mb-2">Departemen</label>
+                        <input type="text" id="departemen" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" placeholder="Masukkan departemen" required>
+                    </div>
+                    <div>
+                        <label class="block text-white font-semibold mb-2">Status</label>
+                        <select id="statusKaryawan" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" required>
+                            <option value="">Pilih Status</option>
+                            <option value="Dosen">Dosen</option>
+                            <option value="Staff">Staff</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-white font-semibold mb-2">Keterangan (Opsional)</label>
+                        <input type="text" id="keteranganKaryawan" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" placeholder="Keterangan tambahan">
+                    </div>
+                    <button type="submit" class="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold py-3 px-6 rounded-lg hover:from-green-600 hover:to-blue-600 transition-all transform hover:scale-105">
+                        ✅ Submit Absen
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Pengunjung Luar Tab -->
+        <div id="content-pengunjung" class="tab-content hidden">
+            <div class="max-w-md mx-auto bg-white/20 backdrop-blur-md rounded-xl p-6">
+                <h2 class="text-2xl font-bold text-white mb-6 flex items-center justify-center">
+                    👥 <span class="ml-2">Absen Pengunjung Luar</span>
+                </h2>
+                <form id="pengunjungForm" class="space-y-4">
+                    <div>
+                        <label class="block text-white font-semibold mb-2">Nama Lengkap</label>
+                        <input type="text" id="namaPengunjung" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" placeholder="Masukkan nama lengkap" required>
+                    </div>
+                    <div>
+                        <label class="block text-white font-semibold mb-2">Asal Instansi</label>
+                        <input type="text" id="asalInstansi" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" placeholder="Masukkan asal instansi" required>
+                    </div>
+                    <div>
+                        <label class="block text-white font-semibold mb-2">No. Telepon</label>
+                        <input type="tel" id="noTelepon" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" placeholder="Masukkan nomor telepon" required>
+                    </div>
+                    <div>
+                        <label class="block text-white font-semibold mb-2">Keperluan</label>
+                        <textarea id="keperluanPengunjung" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" rows="3" placeholder="Jelaskan keperluan Anda" required></textarea>
+                    </div>
+                    <button type="submit" class="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold py-3 px-6 rounded-lg hover:from-green-600 hover:to-blue-600 transition-all transform hover:scale-105">
+                        ✅ Daftar Kunjungan
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Laporan Tab -->
+        <div id="content-laporan" class="tab-content hidden">
+            <div class="bg-white/20 backdrop-blur-md rounded-xl p-6">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 no-print">
+                    <h2 class="text-2xl font-bold text-white flex items-center">
+                        📊 <span class="ml-2">Laporan Absensi</span>
+                    </h2>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <button onclick="exportToExcel()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-semibold transition-all">
+                            📊 Export Excel
+                        </button>
+                        <button onclick="printReport()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold transition-all">
+                            🖨️ Print
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filter -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 no-print">
+                    <div>
+                        <label class="block text-white font-semibold mb-2">Tanggal Dari</label>
+                        <input type="date" id="filterTanggalDari" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-white font-semibold mb-2">Tanggal Sampai</label>
+                        <input type="date" id="filterTanggalSampai" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-white font-semibold mb-2">Jenis Pengunjung</label>
+                        <select id="filterJenis" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all">
+                            <option value="">Semua</option>
+                            <option value="Mahasiswa">Mahasiswa</option>
+                            <option value="Karyawan">Karyawan</option>
+                            <option value="Pengunjung Luar">Pengunjung Luar</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 gap-4 mb-6 no-print">
+                    <div>
+                        <label class="block text-white font-semibold mb-2">Sumber Data</label>
+                        <select id="filterSource" class="w-full p-3 rounded-lg border-0 bg-white/90 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all">
+                            <option value="">Semua Sumber</option>
+                            <option value="current">Data Saat Ini</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button onclick="filterLaporan()" class="mb-6 bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold py-2 px-6 rounded-lg hover:from-green-600 hover:to-blue-600 transition-all no-print">
+                    🔍 Filter Data
+                </button>
+
+                <!-- Print Header -->
+                <div class="print-only text-center mb-6">
+                    <h1 class="text-2xl font-bold">LAPORAN ABSENSI PERPUSTAKAAN</h1>
+                    <h2 class="text-xl" id="printTitle">UNIVERSITAS ISLAM AS-SYAFI'IYAH MAB</h2>
+                    <p class="mt-2">Periode: <span id="printPeriode"></span></p>
+                </div>
+
+                <!-- Statistik -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-white/10 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-white" id="totalMahasiswa">0</div>
+                        <div class="text-white/80">Total Mahasiswa</div>
+                    </div>
+                    <div class="bg-white/10 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-white" id="totalKaryawan">0</div>
+                        <div class="text-white/80">Total Karyawan</div>
+                    </div>
+                    <div class="bg-white/10 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-white" id="totalPengunjung">0</div>
+                        <div class="text-white/80">Total Pengunjung Luar</div>
+                    </div>
+                </div>
+
+                <!-- Tabel Laporan -->
+                <div class="bg-white rounded-lg overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gradient-to-r from-green-500 to-blue-500 text-white">
+                                <tr>
+                                    <th class="px-4 py-3 text-left">No</th>
+                                    <th class="px-4 py-3 text-left">Tanggal</th>
+                                    <th class="px-4 py-3 text-left">Waktu</th>
+                                    <th class="px-4 py-3 text-left">Nama</th>
+                                    <th class="px-4 py-3 text-left">Jenis</th>
+                                    <th class="px-4 py-3 text-left">Keperluan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="laporanTableBody">
+                                <tr>
+                                    <td colspan="6" class="px-4 py-8 text-center text-gray-500">Tidak ada data</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div id="successModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-6 max-w-sm mx-4 text-center">
+            <div class="text-6xl mb-4">✅</div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2">Berhasil!</h3>
+            <p id="successMessage" class="text-gray-600 mb-4">Absen berhasil dicatat</p>
+            <button onclick="closeModal()" class="bg-gradient-to-r from-green-500 to-blue-500 text-white px-6 py-2 rounded-lg font-semibold">
+                OK
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-6 max-w-4xl mx-4 max-h-96 overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">⚙️ Pengaturan Website</h3>
+                <button onclick="closeSettingsModal()" class="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- Pengaturan Tampilan -->
+                <div class="space-y-4">
+                    <h4 class="font-semibold text-gray-800 text-lg border-b pb-2">🎨 Pengaturan Tampilan</h4>
+                    
+                    <div>
+                        <label class="block text-gray-700 font-semibold mb-2">Warna Utama</label>
+                        <div class="flex items-center space-x-3">
+                            <input type="color" id="primaryColor" class="color-picker" value="#10b981">
+                            <span class="text-sm text-gray-600">Warna background utama</span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 font-semibold mb-2">Warna Sekunder</label>
+                        <div class="flex items-center space-x-3">
+                            <input type="color" id="secondaryColor" class="color-picker" value="#3b82f6">
+                            <span class="text-sm text-gray-600">Warna gradient kedua</span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 font-semibold mb-2">Logo/Emoji</label>
+                        <div class="flex items-center space-x-3">
+                            <input type="text" id="logoEmojiInput" class="w-20 p-2 border border-gray-300 rounded text-center text-2xl" value="📚" maxlength="2">
+                            <span class="text-sm text-gray-600">Emoji atau simbol untuk logo</span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 font-semibold mb-2">Judul Website</label>
+                        <input type="text" id="websiteTitleInput" class="w-full p-3 border border-gray-300 rounded-lg" value="Perpustakaan UNSIAK MAB">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 font-semibold mb-2">Subjudul</label>
+                        <input type="text" id="websiteSubtitleInput" class="w-full p-3 border border-gray-300 rounded-lg" value="Sistem Absensi Pengunjung">
+                    </div>
+                    
+                    <div class="flex space-x-2">
+                        <button onclick="applySettings()" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-all">
+                            ✅ Terapkan Perubahan
+                        </button>
+                        <button onclick="resetSettings()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
+                            🔄 Reset
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Pengaturan Sistem -->
+                <div class="space-y-4">
+                    <h4 class="font-semibold text-gray-800 text-lg border-b pb-2">🔧 Pengaturan Sistem</h4>
+                    
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <h5 class="font-semibold text-yellow-800 mb-2">📱 Kompatibilitas Android</h5>
+                        <div class="text-yellow-700 text-sm space-y-1">
+                            <p>✅ Responsive design untuk semua ukuran layar</p>
+                            <p>✅ Touch-friendly interface</p>
+                            <p>✅ Optimized input fields untuk mobile</p>
+                            <p>✅ Fast loading dan smooth scrolling</p>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h5 class="font-semibold text-blue-800 mb-2">🌐 Google Sheets Integration</h5>
+                        <div class="text-blue-700 text-sm mb-3 space-y-2">
+                            <p><strong>Status:</strong> <span id="integrationStatus" class="text-red-600">⚠️ Belum dikonfigurasi</span></p>
+                            <p><strong>Pesan "Gagal mengirim ke Google Sheets"?</strong> Ikuti langkah setup di bawah:</p>
+                        </div>
+                        
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-blue-800 font-semibold mb-1 text-sm">URL Google Apps Script:</label>
+                                <input type="url" id="googleScriptUrl" class="w-full p-2 border border-blue-300 rounded text-sm" 
+                                       placeholder="https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec">
+                                <p class="text-xs text-blue-600 mt-1">Paste URL dari Google Apps Script yang sudah di-deploy</p>
+                            </div>
+                            
+                            <div class="flex flex-wrap gap-2">
+                                <button onclick="saveGoogleScriptConfig()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded font-semibold text-xs">
+                                    💾 Simpan Konfigurasi
+                                </button>
+                                <button onclick="testGoogleScriptConnection()" class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded font-semibold text-xs">
+                                    🔍 Test Koneksi
+                                </button>
+                                <button onclick="showGoogleScriptCode()" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded font-semibold text-xs">
+                                    📋 Lihat Kode Script
+                                </button>
+                                <button onclick="showSetupGuide()" class="bg-purple-500 hover:bg-purple-600 text-white px-3 py-2 rounded font-semibold text-xs">
+                                    📖 Panduan Setup
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <h5 class="font-semibold text-green-800 mb-2">💾 Status Data</h5>
+                        <div class="text-green-700 text-sm space-y-1">
+                            <p>📊 Total data absen: <span id="totalDataCount">0</span></p>
+                            <p>📥 Sumber data import: <span id="importSourceCount">0</span></p>
+                            <p>💾 Data tersimpan di browser lokal</p>
+                        </div>
+                        <button onclick="exportAllData()" class="mt-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded font-semibold text-sm">
+                            📤 Backup Semua Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Data Modal -->
+    <div id="importModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-6 max-w-2xl mx-4 max-h-96 overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">📥 Import Data Absen Lama</h3>
+                <button onclick="closeImportModal()" class="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            
+            <div class="space-y-4">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 class="font-semibold text-blue-800 mb-2">ℹ️ Cara Import Data</h4>
+                    <ol class="list-decimal list-inside text-blue-700 text-sm space-y-1">
+                        <li>Buka Google Sheets dengan data absen lama Anda</li>
+                        <li>Klik File → Share → Publish to web</li>
+                        <li>Pilih sheet yang berisi data absen</li>
+                        <li>Format: CSV, lalu klik Publish</li>
+                        <li>Copy link CSV dan paste di form di bawah</li>
+                    </ol>
+                </div>
+                
+                <form id="importForm" class="space-y-4">
+                    <div>
+                        <label class="block text-gray-700 font-semibold mb-2">Nama/Tahun Data</label>
+                        <input type="text" id="importName" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Contoh: Data Absen 2023" required>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 font-semibold mb-2">Link CSV Google Sheets</label>
+                        <input type="url" id="importUrl" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="https://docs.google.com/spreadsheets/d/e/..." required>
+                        <p class="text-sm text-gray-500 mt-1">Pastikan link berakhiran dengan &output=csv</p>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 font-semibold mb-2">Jenis Data</label>
+                        <select id="importType" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            <option value="">Pilih Jenis Data</option>
+                            <option value="mahasiswa">Data Absen Mahasiswa</option>
+                            <option value="karyawan">Data Absen Karyawan</option>
+                            <option value="pengunjung">Data Absen Pengunjung</option>
+                        </select>
+                    </div>
+                    
+                    <div class="flex space-x-3">
+                        <button type="submit" class="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-lg transition-all">
+                            📥 Import Data
+                        </button>
+                        <button type="button" onclick="closeImportModal()" class="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
+                            Batal
+                        </button>
+                    </div>
+                </form>
+                
+                <!-- Imported Data Sources -->
+                <div id="importedSources" class="mt-6">
+                    <h4 class="font-semibold text-gray-800 mb-3">📊 Sumber Data yang Sudah Diimport</h4>
+                    <div id="sourcesList" class="space-y-2">
+                        <p class="text-gray-500 text-sm">Belum ada data yang diimport</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Google Apps Script Code Modal -->
+    <div id="scriptModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-6 max-w-4xl mx-4 max-h-96 overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">Kode Google Apps Script</h3>
+                <button onclick="closeScriptModal()" class="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            <pre id="scriptCode" class="bg-gray-100 p-4 rounded text-sm overflow-x-auto"></pre>
+            <div class="mt-4 text-sm text-gray-600">
+                <p><strong>Langkah setup:</strong></p>
+                <ol class="list-decimal list-inside mt-2 space-y-1">
+                    <li>Buka <a href="https://script.google.com" target="_blank" class="text-blue-500">script.google.com</a></li>
+                    <li>Buat project baru dan paste kode di atas</li>
+                    <li>Deploy → New deployment → Type: Web app</li>
+                    <li>Execute as: Me, Access: Anyone</li>
+                    <li>Copy URL dan ganti di konfigurasi website</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <!-- Setup Guide Modal -->
+    <div id="setupGuideModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-6 max-w-4xl mx-4 max-h-96 overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">📖 Panduan Setup Google Sheets</h3>
+                <button onclick="closeSetupGuideModal()" class="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            
+            <div class="space-y-6">
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h4 class="font-semibold text-yellow-800 mb-2">⚠️ Mengapa Muncul Pesan "Gagal Menyimpan ke Google Sheets"?</h4>
+                    <div class="text-yellow-700 text-sm space-y-2">
+                        <p><strong>Penyebab:</strong> Google Apps Script belum dikonfigurasi atau URL script salah.</p>
+                        <p><strong>Solusi:</strong> Ikuti langkah-langkah di bawah untuk setup integrasi Google Sheets.</p>
+                        <p><strong>Sementara ini:</strong> Data tetap tersimpan aman di browser lokal dan bisa diexport ke Excel.</p>
+                    </div>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="font-semibold text-gray-800 mb-3">🔧 Langkah 1: Buat Google Spreadsheet</h4>
+                        <ol class="list-decimal list-inside text-sm space-y-1 text-gray-700">
+                            <li>Buka <a href="https://sheets.google.com" target="_blank" class="text-blue-500">Google Sheets</a></li>
+                            <li>Buat spreadsheet baru</li>
+                            <li>Buat 4 sheet: "Data Mahasiswa", "Absen Mahasiswa", "Absen Karyawan", "Absen Pengunjung"</li>
+                            <li>Atur header kolom sesuai kebutuhan</li>
+                        </ol>
+                    </div>
+                    
+                    <div>
+                        <h4 class="font-semibold text-gray-800 mb-3">⚙️ Langkah 2: Setup Google Apps Script</h4>
+                        <ol class="list-decimal list-inside text-sm space-y-1 text-gray-700">
+                            <li>Buka <a href="https://script.google.com" target="_blank" class="text-blue-500">Google Apps Script</a></li>
+                            <li>Klik "New Project"</li>
+                            <li>Paste kode script (klik tombol "Lihat Kode Script")</li>
+                            <li>Ganti SPREADSHEET_ID dengan ID spreadsheet Anda</li>
+                            <li>Save project dengan nama "Absensi Perpustakaan"</li>
+                        </ol>
+                    </div>
+                    
+                    <div>
+                        <h4 class="font-semibold text-gray-800 mb-3">🚀 Langkah 3: Deploy Script</h4>
+                        <ol class="list-decimal list-inside text-sm space-y-1 text-gray-700">
+                            <li>Klik "Deploy" → "New deployment"</li>
+                            <li>Type: pilih "Web app"</li>
+                            <li>Execute as: "Me"</li>
+                            <li>Who has access: "Anyone"</li>
+                            <li>Klik "Deploy"</li>
+                            <li>Copy URL yang diberikan</li>
+                        </ol>
+                    </div>
+                    
+                    <div>
+                        <h4 class="font-semibold text-gray-800 mb-3">🔗 Langkah 4: Update Konfigurasi</h4>
+                        <ol class="list-decimal list-inside text-sm space-y-1 text-gray-700">
+                            <li>Buka file HTML website ini</li>
+                            <li>Cari baris "writeScriptUrl: 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE'"</li>
+                            <li>Ganti dengan URL dari langkah 3</li>
+                            <li>Save dan refresh website</li>
+                            <li>Test dengan melakukan absen</li>
+                        </ol>
+                    </div>
+                </div>
+                
+                <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <h4 class="font-semibold text-red-800 mb-2">❌ Troubleshooting "Tidak dapat terhubung"</h4>
+                    <div class="text-red-700 text-sm space-y-2">
+                        <p><strong>Pesan "Failed to fetch" - Penyebab Umum:</strong></p>
+                        <ul class="list-disc list-inside ml-4 space-y-1">
+                            <li><strong>Website belum di-publish:</strong> Jika website masih berupa file HTML lokal, tidak bisa akses Google Apps Script karena CORS policy</li>
+                            <li><strong>URL Google Apps Script salah:</strong> URL tidak valid atau belum berakhiran dengan <code>/exec</code></li>
+                            <li><strong>Script belum di-deploy:</strong> Google Apps Script belum di-deploy dengan permission yang benar</li>
+                            <li><strong>Spreadsheet ID belum diganti:</strong> Masih menggunakan placeholder di kode script</li>
+                            <li><strong>CORS Policy:</strong> Browser memblokir request dari file lokal ke Google Apps Script</li>
+                        </ul>
+                        <p><strong>Solusi Step by Step:</strong></p>
+                        <ol class="list-decimal list-inside ml-4 space-y-1">
+                            <li><strong>Publish website:</strong> Upload ke hosting (GitHub Pages, Netlify, dll) atau jalankan di web server</li>
+                            <li><strong>Pastikan URL script benar:</strong> Harus berakhiran dengan <code>/exec</code></li>
+                            <li><strong>Deploy ulang script:</strong> Execute as "Me", Who has access "Anyone"</li>
+                            <li><strong>Ganti SPREADSHEET_ID:</strong> Di kode Google Apps Script</li>
+                            <li><strong>Test dari browser:</strong> Buka URL script langsung, harus tampil JSON response</li>
+                        </ol>
+                        <p><strong>Sementara ini:</strong> Data tetap tersimpan aman di browser lokal dan bisa diexport ke Excel.</p>
+                    </div>
+                </div>
+                
+                <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h4 class="font-semibold text-green-800 mb-2">✅ Setelah Setup Berhasil</h4>
+                    <div class="text-green-700 text-sm space-y-1">
+                        <p>• Data absen akan otomatis tersimpan ke Google Sheets</p>
+                        <p>• Bisa diakses dari mana saja dan kapan saja</p>
+                        <p>• Data tersinkronisasi real-time</p>
+                        <p>• Bisa dibuat laporan dan analisis di Google Sheets</p>
+                    </div>
+                </div>
+                
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 class="font-semibold text-blue-800 mb-3">🌐 Cara Publish Website ke GitHub Pages</h4>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <h5 class="font-semibold text-blue-700 mb-2">📋 Langkah 1: Persiapan File</h5>
+                            <ol class="list-decimal list-inside text-blue-600 text-sm space-y-1 ml-4">
+                                <li>Copy semua kode HTML website ini</li>
+                                <li>Buat file baru dengan nama <code class="bg-blue-100 px-1 rounded">index.html</code></li>
+                                <li>Paste kode HTML ke dalam file tersebut</li>
+                                <li>Save file di komputer Anda</li>
+                            </ol>
+                        </div>
+                        
+                        <div>
+                            <h5 class="font-semibold text-blue-700 mb-2">🔧 Langkah 2: Buat Repository GitHub</h5>
+                            <ol class="list-decimal list-inside text-blue-600 text-sm space-y-1 ml-4">
+                                <li>Buka <a href="https://github.com" target="_blank" class="text-blue-500 underline">github.com</a> dan login</li>
+                                <li>Klik tombol "New" atau "+" → "New repository"</li>
+                                <li>Nama repository: <code class="bg-blue-100 px-1 rounded">absensi-perpustakaan</code></li>
+                                <li>Centang "Add a README file"</li>
+                                <li>Pilih "Public" (agar bisa menggunakan GitHub Pages gratis)</li>
+                                <li>Klik "Create repository"</li>
+                            </ol>
+                        </div>
+                        
+                        <div>
+                            <h5 class="font-semibold text-blue-700 mb-2">📤 Langkah 3: Upload File</h5>
+                            <ol class="list-decimal list-inside text-blue-600 text-sm space-y-1 ml-4">
+                                <li>Di halaman repository, klik "uploading an existing file"</li>
+                                <li>Drag & drop file <code class="bg-blue-100 px-1 rounded">index.html</code> atau klik "choose your files"</li>
+                                <li>Tunggu upload selesai</li>
+                                <li>Scroll ke bawah, tulis commit message: "Upload sistem absensi perpustakaan"</li>
+                                <li>Klik "Commit changes"</li>
+                            </ol>
+                        </div>
+                        
+                        <div>
+                            <h5 class="font-semibold text-blue-700 mb-2">🚀 Langkah 4: Aktifkan GitHub Pages</h5>
+                            <ol class="list-decimal list-inside text-blue-600 text-sm space-y-1 ml-4">
+                                <li>Di repository, klik tab "Settings"</li>
+                                <li>Scroll ke bawah, cari bagian "Pages" di sidebar kiri</li>
+                                <li>Di "Source", pilih "Deploy from a branch"</li>
+                                <li>Branch: pilih "main" atau "master"</li>
+                                <li>Folder: pilih "/ (root)"</li>
+                                <li>Klik "Save"</li>
+                            </ol>
+                        </div>
+                        
+                        <div>
+                            <h5 class="font-semibold text-blue-700 mb-2">🔗 Langkah 5: Akses Website</h5>
+                            <div class="text-blue-600 text-sm space-y-2 ml-4">
+                                <p><strong>URL website Anda:</strong></p>
+                                <p class="bg-blue-100 p-2 rounded font-mono text-xs">
+                                    https://USERNAME.github.io/absensi-perpustakaan
+                                </p>
+                                <p class="text-xs">(Ganti USERNAME dengan username GitHub Anda)</p>
+                                <p><strong>Contoh:</strong> https://johndoe.github.io/absensi-perpustakaan</p>
+                                <p class="text-yellow-600">⏱️ <strong>Tunggu 5-10 menit</strong> setelah setup untuk website aktif</p>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-yellow-100 border border-yellow-300 rounded p-3">
+                            <h6 class="font-semibold text-yellow-800 mb-1">⚠️ Penting untuk Google Sheets Integration:</h6>
+                            <div class="text-yellow-700 text-xs space-y-1">
+                                <p>• Setelah website online, baru setup Google Apps Script</p>
+                                <p>• Google Apps Script tidak bisa diakses dari file HTML lokal</p>
+                                <p>• Website harus di-publish dulu agar integrasi Google Sheets berfungsi</p>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-green-100 border border-green-300 rounded p-3">
+                            <h6 class="font-semibold text-green-800 mb-1">✅ Keuntungan GitHub Pages:</h6>
+                            <div class="text-green-700 text-xs space-y-1">
+                                <p>• Hosting gratis selamanya</p>
+                                <p>• SSL certificate otomatis (HTTPS)</p>
+                                <p>• Bisa diakses dari mana saja</p>
+                                <p>• Update mudah (tinggal edit file di GitHub)</p>
+                                <p>• Backup otomatis dengan version control</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data mahasiswa dan absensi
+        let mahasiswaData = [];
+        let absensiData = [];
+        let importedDataSources = [];
+        let websiteSettings = {
+            primaryColor: '#10b981',
+            secondaryColor: '#3b82f6',
+            logoEmoji: '📚',
+            title: 'Perpustakaan UNSIAK MAB',
+            subtitle: 'Sistem Absensi Pengunjung'
+        };
+
+        // Google Sheets URLs - GANTI DENGAN URL ANDA SENDIRI
+        let SHEETS_CONFIG = {
+            mahasiswaUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQZIqKl3eb5Nmzy8fuJHGsRnI9zTJbhuCZ3JkD1AoIXUz-INeDwW44tgQCHhQMW9giBEyE3MLaiF7MY/pub?gid=0&single=true&output=csv',
+            absenMahasiswaUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQZIqKl3eb5Nmzy8fuJHGsRnI9zTJbhuCZ3JkD1AoIXUz-INeDwW44tgQCHhQMW9giBEyE3MLaiF7MY/pub?gid=163044001&single=true&output=csv',
+            absenKaryawanUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQZIqKl3eb5Nmzy8fuJHGsRnI9zTJbhuCZ3JkD1AoIXUz-INeDwW44tgQCHhQMW9giBEyE3MLaiF7MY/pub?gid=2058488495&single=true&output=csv',
+            absenPengunjungUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQZIqKl3eb5Nmzy8fuJHGsRnI9zTJbhuCZ3JkD1AoIXUz-INeDwW44tgQCHhQMW9giBEyE3MLaiF7MY/pub?gid=1144585406&single=true&output=csv',
+            // URL Google Apps Script akan diatur melalui pengaturan
+            writeScriptUrl: 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE'
+        };
+
+        // Apply website settings
+        function applySettings() {
+            const primaryColor = document.getElementById('primaryColor').value;
+            const secondaryColor = document.getElementById('secondaryColor').value;
+            const logoEmoji = document.getElementById('logoEmojiInput').value;
+            const title = document.getElementById('websiteTitleInput').value;
+            const subtitle = document.getElementById('websiteSubtitleInput').value;
+            
+            // Update CSS variables
+            document.documentElement.style.setProperty('--primary-color', primaryColor);
+            document.documentElement.style.setProperty('--secondary-color', secondaryColor);
+            
+            // Update logo and text
+            document.getElementById('logoEmoji').textContent = logoEmoji;
+            document.getElementById('websiteTitle').textContent = title;
+            document.getElementById('websiteSubtitle').textContent = subtitle;
+            document.getElementById('printTitle').textContent = title.toUpperCase();
+            
+            // Save settings
+            websiteSettings = { primaryColor, secondaryColor, logoEmoji, title, subtitle };
+            localStorage.setItem('websiteSettings', JSON.stringify(websiteSettings));
+            
+            showNotification('Pengaturan berhasil diterapkan!', 'success');
+            closeSettingsModal();
+        }
+
+        // Reset settings to default
+        function resetSettings() {
+            document.getElementById('primaryColor').value = '#10b981';
+            document.getElementById('secondaryColor').value = '#3b82f6';
+            document.getElementById('logoEmojiInput').value = '📚';
+            document.getElementById('websiteTitleInput').value = 'Perpustakaan UNSIAK MAB';
+            document.getElementById('websiteSubtitleInput').value = 'Sistem Absensi Pengunjung';
+            
+            applySettings();
+        }
+
+        // Load saved settings
+        function loadSettings() {
+            const saved = localStorage.getItem('websiteSettings');
+            if (saved) {
+                websiteSettings = JSON.parse(saved);
+                
+                // Apply saved settings
+                document.documentElement.style.setProperty('--primary-color', websiteSettings.primaryColor);
+                document.documentElement.style.setProperty('--secondary-color', websiteSettings.secondaryColor);
+                document.getElementById('logoEmoji').textContent = websiteSettings.logoEmoji;
+                document.getElementById('websiteTitle').textContent = websiteSettings.title;
+                document.getElementById('websiteSubtitle').textContent = websiteSettings.subtitle;
+                document.getElementById('printTitle').textContent = websiteSettings.title.toUpperCase();
+                
+                // Update form inputs
+                document.getElementById('primaryColor').value = websiteSettings.primaryColor;
+                document.getElementById('secondaryColor').value = websiteSettings.secondaryColor;
+                document.getElementById('logoEmojiInput').value = websiteSettings.logoEmoji;
+                document.getElementById('websiteTitleInput').value = websiteSettings.title;
+                document.getElementById('websiteSubtitleInput').value = websiteSettings.subtitle;
+            }
+        }
+
+        // Export all data as backup
+        function exportAllData() {
+            const backupData = {
+                absensiData: absensiData,
+                importedDataSources: importedDataSources,
+                websiteSettings: websiteSettings,
+                sheetsConfig: SHEETS_CONFIG,
+                exportDate: new Date().toISOString()
+            };
+            
+            const dataStr = JSON.stringify(backupData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = `backup_absensi_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.json`;
+            link.click();
+            
+            showNotification('Backup data berhasil diunduh!', 'success');
+        }
+
+        // Save Google Apps Script configuration
+        function saveGoogleScriptConfig() {
+            const scriptUrl = document.getElementById('googleScriptUrl').value.trim();
+            
+            if (!scriptUrl) {
+                showNotification('Harap masukkan URL Google Apps Script!', 'error');
+                return;
+            }
+            
+            // Validasi URL
+            if (!scriptUrl.includes('script.google.com') || !scriptUrl.includes('/exec')) {
+                showNotification('URL tidak valid! Pastikan menggunakan URL deployment Google Apps Script yang berakhiran dengan /exec', 'error');
+                return;
+            }
+            
+            // Simpan konfigurasi
+            SHEETS_CONFIG.writeScriptUrl = scriptUrl;
+            localStorage.setItem('sheetsConfig', JSON.stringify(SHEETS_CONFIG));
+            
+            // Update status
+            updateIntegrationStatus();
+            
+            showNotification('Konfigurasi Google Apps Script berhasil disimpan!', 'success');
+        }
+
+        // Test Google Apps Script connection
+        async function testGoogleScriptConnection() {
+            const scriptUrl = SHEETS_CONFIG.writeScriptUrl;
+            
+            if (!scriptUrl || scriptUrl === 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
+                showNotification('Harap simpan konfigurasi URL terlebih dahulu!', 'error');
+                return;
+            }
+            
+            try {
+                showLoading('Testing koneksi ke Google Apps Script...');
+                
+                // Test dengan data dummy
+                const testData = {
+                    action: 'test',
+                    timestamp: new Date().toISOString(),
+                    message: 'Test connection from Absensi Perpustakaan'
+                };
+                
+                const response = await fetch(scriptUrl, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testData)
+                });
+                
+                hideLoading();
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showNotification('✅ Koneksi berhasil! Google Apps Script dapat diakses.', 'success');
+                    updateIntegrationStatus(true);
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+            } catch (error) {
+                console.error('Test connection error:', error);
+                hideLoading();
+                showNotification(`❌ Koneksi gagal: ${error.message}`, 'error');
+                updateIntegrationStatus(false);
+            }
+        }
+
+        // Update integration status display
+        function updateIntegrationStatus(isConnected = null) {
+            const statusElement = document.getElementById('integrationStatus');
+            const scriptUrl = SHEETS_CONFIG.writeScriptUrl;
+            
+            if (isConnected === true) {
+                statusElement.innerHTML = '<span class="text-green-600">✅ Terhubung dan berfungsi</span>';
+            } else if (isConnected === false) {
+                statusElement.innerHTML = '<span class="text-red-600">❌ Tidak dapat terhubung</span>';
+            } else if (scriptUrl && scriptUrl !== 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
+                statusElement.innerHTML = '<span class="text-yellow-600">⚠️ Dikonfigurasi (belum ditest)</span>';
+            } else {
+                statusElement.innerHTML = '<span class="text-red-600">⚠️ Belum dikonfigurasi</span>';
+            }
+        }
+
+        // Load Google Sheets configuration
+        function loadSheetsConfig() {
+            const saved = localStorage.getItem('sheetsConfig');
+            if (saved) {
+                const savedConfig = JSON.parse(saved);
+                SHEETS_CONFIG = { ...SHEETS_CONFIG, ...savedConfig };
+                
+                // Update form input
+                document.getElementById('googleScriptUrl').value = SHEETS_CONFIG.writeScriptUrl || '';
+                
+                // Update status
+                updateIntegrationStatus();
+            }
+        }
+
+        // Update settings modal data counts
+        function updateSettingsDataCounts() {
+            document.getElementById('totalDataCount').textContent = absensiData.length;
+            document.getElementById('importSourceCount').textContent = importedDataSources.length;
+        }
+
+        // Load data mahasiswa dari Google Sheets
+        async function loadMahasiswaData() {
+            try {
+                showLoading('Memuat data mahasiswa...');
+                const response = await fetch(SHEETS_CONFIG.mahasiswaUrl);
+                const csvText = await response.text();
+                
+                // Parse CSV
+                const lines = csvText.trim().split('\n');
+                const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase());
+                
+                mahasiswaData = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const values = parseCSVLine(lines[i]);
+                    if (values.length >= 3) {
+                        mahasiswaData.push({
+                            nim: values[0] || '',
+                            nama: values[1] || '',
+                            prodi: values[2] || '',
+                            fakultas: values[3] || '',
+                            angkatan: values[4] || ''
+                        });
+                    }
+                }
+                
+                console.log(`Berhasil memuat ${mahasiswaData.length} data mahasiswa`);
+                showNotification(`Berhasil memuat ${mahasiswaData.length} data mahasiswa`, 'success');
+                hideLoading();
+            } catch (error) {
+                console.error('Error loading mahasiswa data:', error);
+                hideLoading();
+                // Fallback ke data simulasi
+                mahasiswaData = [
+                    { nim: '2021001', nama: 'Ahmad Rizki', prodi: 'Teknik Informatika', fakultas: 'Teknik', angkatan: '2021' },
+                    { nim: '2021002', nama: 'Siti Nurhaliza', prodi: 'Sistem Informasi', fakultas: 'Teknik', angkatan: '2021' },
+                    { nim: '2021003', nama: 'Budi Santoso', prodi: 'Manajemen', fakultas: 'Ekonomi', angkatan: '2021' },
+                    { nim: '2021004', nama: 'Dewi Sartika', prodi: 'Akuntansi', fakultas: 'Ekonomi', angkatan: '2021' },
+                    { nim: '2021005', nama: 'Eko Prasetyo', prodi: 'Teknik Informatika', fakultas: 'Teknik', angkatan: '2021' }
+                ];
+                showNotification('Menggunakan data simulasi - tidak dapat terhubung ke Google Sheets', 'warning');
+            }
+        }
+
+        // Parse CSV line dengan handling untuk koma dalam quotes
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        }
+
+        // Kirim data absen ke Google Sheets
+        async function sendToGoogleSheets(data, sheetType) {
+            try {
+                showLoading('Mengirim data ke Google Sheets...');
+                
+                // Format data sesuai dengan kolom spreadsheet
+                let formattedData = {};
+                
+                if (sheetType === 'mahasiswa') {
+                    formattedData = {
+                        action: 'addAbsenMahasiswa',
+                        timestamp: new Date().toISOString(),
+                        tanggal: data.tanggal,
+                        waktu: data.waktu,
+                        nim: data.nim,
+                        nama: data.nama,
+                        prodi: data.prodi,
+                        fakultas: data.fakultas || '',
+                        keperluan: data.keperluan,
+                        status: 'Hadir'
+                    };
+                } else if (sheetType === 'karyawan') {
+                    formattedData = {
+                        action: 'addAbsenKaryawan',
+                        timestamp: new Date().toISOString(),
+                        tanggal: data.tanggal,
+                        waktu: data.waktu,
+                        nama: data.nama,
+                        departemen: data.departemen,
+                        status: data.status,
+                        keterangan: data.keterangan || ''
+                    };
+                } else if (sheetType === 'pengunjung') {
+                    formattedData = {
+                        action: 'addAbsenPengunjung',
+                        timestamp: new Date().toISOString(),
+                        tanggal: data.tanggal,
+                        waktu: data.waktu,
+                        nama: data.nama,
+                        asal_instansi: data.instansi,
+                        no_telepon: data.telepon,
+                        keperluan: data.keperluan,
+                        status: 'Masuk'
+                    };
+                }
+
+                // Kirim ke Google Apps Script (jika tersedia)
+                if (SHEETS_CONFIG.writeScriptUrl === 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE' || 
+                    SHEETS_CONFIG.writeScriptUrl.includes('YOUR_SCRIPT_ID') ||
+                    !SHEETS_CONFIG.writeScriptUrl.startsWith('https://script.google.com')) {
+                    // Jika belum dikonfigurasi, simpan lokal saja
+                    console.log('Data yang akan dikirim:', formattedData);
+                    hideLoading();
+                    showNotification('Data disimpan lokal - Google Apps Script belum dikonfigurasi', 'warning');
+                    return true;
+                }
+
+                const response = await fetch(SHEETS_CONFIG.writeScriptUrl, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formattedData)
+                });
+
+                const result = await response.json();
+                hideLoading();
+                
+                if (result.success) {
+                    showNotification('Data berhasil dikirim ke Google Sheets', 'success');
+                    return true;
+                } else {
+                    throw new Error(result.error || 'Gagal mengirim data');
+                }
+                
+            } catch (error) {
+                console.error('Error sending to Google Sheets:', error);
+                hideLoading();
+                showNotification('Gagal mengirim ke Google Sheets, data disimpan lokal', 'warning');
+                // Tetap simpan lokal meskipun gagal kirim ke sheets
+                return true;
+            }
+        }
+
+        // Show/Hide loading
+        function showLoading(text) {
+            document.getElementById('loadingText').textContent = text;
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+        }
+
+        // Show notification
+        function showNotification(text, type = 'info') {
+            const notification = document.getElementById('notification');
+            const icon = document.getElementById('notificationIcon');
+            const textEl = document.getElementById('notificationText');
+            
+            const icons = {
+                success: '✅',
+                warning: '⚠️',
+                error: '❌',
+                info: 'ℹ️'
+            };
+            
+            icon.textContent = icons[type] || icons.info;
+            textEl.textContent = text;
+            
+            notification.classList.remove('hidden');
+            
+            setTimeout(() => {
+                notification.classList.add('hidden');
+            }, 5000);
+        }
+
+        // Refresh data
+        async function refreshData() {
+            await loadMahasiswaData();
+            updateAbsenHariIni();
+            if (document.getElementById('content-laporan').classList.contains('hidden') === false) {
+                loadLaporan();
+            }
+        }
+
+        // Show Google Apps Script code
+        function showGoogleScriptCode() {
+            const code = `function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    
+    // Handle test connection
+    if (data.action === 'test') {
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          success: true, 
+          message: 'Koneksi berhasil! Google Apps Script berfungsi dengan baik.',
+          timestamp: new Date().toISOString()
+        }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    const spreadsheetId = 'GANTI_DENGAN_ID_SPREADSHEET_ANDA'; // Ganti dengan ID spreadsheet Anda
+    const ss = SpreadsheetApp.openById(spreadsheetId);
+    
+    let sheet;
+    let values = [];
+    
+    if (data.action === 'addAbsenMahasiswa') {
+      sheet = ss.getSheetByName('Absen Mahasiswa') || ss.getSheets()[1];
+      values = [
+        data.timestamp,
+        data.tanggal,
+        data.waktu,
+        data.nim,
+        data.nama,
+        data.prodi,
+        data.fakultas,
+        data.keperluan,
+        data.status
+      ];
+    } else if (data.action === 'addAbsenKaryawan') {
+      sheet = ss.getSheetByName('Absen Karyawan') || ss.getSheets()[2];
+      values = [
+        data.timestamp,
+        data.tanggal,
+        data.waktu,
+        data.nama,
+        data.departemen,
+        data.status,
+        data.keterangan
+      ];
+    } else if (data.action === 'addAbsenPengunjung') {
+      sheet = ss.getSheetByName('Absen Pengunjung') || ss.getSheets()[3];
+      values = [
+        data.timestamp,
+        data.tanggal,
+        data.waktu,
+        data.nama,
+        data.asal_instansi,
+        data.no_telepon,
+        data.keperluan,
+        data.status
+      ];
+    }
+    
+    if (sheet && values.length > 0) {
+      sheet.appendRow(values);
+      return ContentService
+        .createTextOutput(JSON.stringify({success: true, message: 'Data berhasil ditambahkan ke ' + sheet.getName()}))
+        .setMimeType(ContentService.MimeType.JSON);
+    } else {
+      throw new Error('Sheet tidak ditemukan atau data tidak valid');
+    }
+    
+  } catch (error) {
+    return ContentService
+      .createTextOutput(JSON.stringify({success: false, error: error.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  return ContentService
+    .createTextOutput(JSON.stringify({
+      message: 'Google Apps Script untuk Absensi Perpustakaan UNSIAK MAB',
+      status: 'active',
+      timestamp: new Date().toISOString()
+    }))
+    .setMimeType(ContentService.MimeType.JSON);
+}`;
+            
+            document.getElementById('scriptCode').textContent = code;
+            document.getElementById('scriptModal').classList.remove('hidden');
+        }
+
+        function closeScriptModal() {
+            document.getElementById('scriptModal').classList.add('hidden');
+        }
+
+        // Show/hide setup guide modal
+        function showSetupGuide() {
+            document.getElementById('setupGuideModal').classList.remove('hidden');
+        }
+
+        function closeSetupGuideModal() {
+            document.getElementById('setupGuideModal').classList.add('hidden');
+        }
+
+        // Show/hide settings modal
+        function showSettings() {
+            updateSettingsDataCounts();
+            document.getElementById('settingsModal').classList.remove('hidden');
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
+
+        // Show/hide import modal
+        function showImportModal() {
+            updateImportedSourcesList();
+            document.getElementById('importModal').classList.remove('hidden');
+        }
+
+        function closeImportModal() {
+            document.getElementById('importModal').classList.add('hidden');
+        }
+
+        // Import data from external CSV
+        async function importDataFromCSV(url, name, type) {
+            try {
+                showLoading(`Mengimport data dari ${name}...`);
+                
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error('Gagal mengakses URL CSV');
+                }
+                
+                const csvText = await response.text();
+                const lines = csvText.trim().split('\n');
+                
+                if (lines.length < 2) {
+                    throw new Error('File CSV kosong atau tidak valid');
+                }
+                
+                const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase());
+                let importedCount = 0;
+                
+                for (let i = 1; i < lines.length; i++) {
+                    const values = parseCSVLine(lines[i]);
+                    if (values.length < 3) continue;
+                    
+                    let importedData = {};
+                    
+                    if (type === 'mahasiswa') {
+                        // Format: timestamp, tanggal, waktu, nim, nama, prodi, fakultas, keperluan, status
+                        importedData = {
+                            tanggal: values[1] || '',
+                            waktu: values[2] || '',
+                            nama: values[4] || '',
+                            nim: values[3] || '',
+                            prodi: values[5] || '',
+                            fakultas: values[6] || '',
+                            jenis: 'Mahasiswa',
+                            keperluan: values[7] || '',
+                            timestamp: new Date(values[0] || Date.now()),
+                            source: name
+                        };
+                    } else if (type === 'karyawan') {
+                        // Format: timestamp, tanggal, waktu, nama, departemen, status, keterangan
+                        importedData = {
+                            tanggal: values[1] || '',
+                            waktu: values[2] || '',
+                            nama: values[3] || '',
+                            departemen: values[4] || '',
+                            status: values[5] || '',
+                            jenis: 'Karyawan',
+                            keperluan: `Absen ${values[5] || ''}`,
+                            keterangan: values[6] || '',
+                            timestamp: new Date(values[0] || Date.now()),
+                            source: name
+                        };
+                    } else if (type === 'pengunjung') {
+                        // Format: timestamp, tanggal, waktu, nama, asal_instansi, no_telepon, keperluan, status
+                        importedData = {
+                            tanggal: values[1] || '',
+                            waktu: values[2] || '',
+                            nama: values[3] || '',
+                            instansi: values[4] || '',
+                            telepon: values[5] || '',
+                            jenis: 'Pengunjung Luar',
+                            keperluan: values[6] || '',
+                            timestamp: new Date(values[0] || Date.now()),
+                            source: name
+                        };
+                    }
+                    
+                    if (importedData.nama && importedData.tanggal) {
+                        absensiData.push(importedData);
+                        importedCount++;
+                    }
+                }
+                
+                // Simpan sumber data
+                importedDataSources.push({
+                    name: name,
+                    url: url,
+                    type: type,
+                    count: importedCount,
+                    importDate: new Date()
+                });
+                
+                // Simpan ke localStorage
+                localStorage.setItem('importedDataSources', JSON.stringify(importedDataSources));
+                localStorage.setItem('absensiData', JSON.stringify(absensiData));
+                
+                hideLoading();
+                showNotification(`Berhasil mengimport ${importedCount} data dari ${name}`, 'success');
+                
+                // Update tampilan
+                updateImportedSourcesList();
+                updateSourceFilterOptions();
+                if (document.getElementById('content-laporan').classList.contains('hidden') === false) {
+                    loadLaporan();
+                }
+                
+                return true;
+                
+            } catch (error) {
+                console.error('Error importing data:', error);
+                hideLoading();
+                showNotification(`Gagal mengimport data: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        // Update daftar sumber data yang sudah diimport
+        function updateImportedSourcesList() {
+            const sourcesList = document.getElementById('sourcesList');
+            
+            if (importedDataSources.length === 0) {
+                sourcesList.innerHTML = '<p class="text-gray-500 text-sm">Belum ada data yang diimport</p>';
+                return;
+            }
+            
+            sourcesList.innerHTML = importedDataSources.map((source, index) => `
+                <div class="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                    <div>
+                        <div class="font-semibold text-gray-800">${source.name}</div>
+                        <div class="text-sm text-gray-600">
+                            ${source.type.charAt(0).toUpperCase() + source.type.slice(1)} • 
+                            ${source.count} data • 
+                            ${source.importDate.toLocaleDateString('id-ID')}
+                        </div>
+                    </div>
+                    <button onclick="removeImportedSource(${index})" class="text-red-500 hover:text-red-700 p-1">
+                        🗑️
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // Hapus sumber data yang diimport
+        function removeImportedSource(index) {
+            if (confirm('Yakin ingin menghapus sumber data ini? Data yang sudah diimport akan tetap ada.')) {
+                importedDataSources.splice(index, 1);
+                localStorage.setItem('importedDataSources', JSON.stringify(importedDataSources));
+                updateImportedSourcesList();
+                showNotification('Sumber data berhasil dihapus', 'success');
+            }
+        }
+
+        // Update waktu real-time
+        function updateTime() {
+            const now = new Date();
+            const timeOptions = { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit',
+                hour12: false 
+            };
+            const dateOptions = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            };
+            
+            document.getElementById('currentTime').textContent = now.toLocaleTimeString('id-ID', timeOptions);
+            document.getElementById('currentDate').textContent = now.toLocaleDateString('id-ID', dateOptions);
+        }
+
+        // Switch tabs
+        function switchTab(tabName) {
+            // Hide all content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active', 'bg-white', 'text-gray-800');
+                btn.classList.add('text-white/80');
+            });
+            
+            // Show selected content
+            document.getElementById(`content-${tabName}`).classList.remove('hidden');
+            
+            // Add active class to selected tab
+            const activeTab = document.getElementById(`tab-${tabName}`);
+            activeTab.classList.add('active', 'bg-white', 'text-gray-800');
+            activeTab.classList.remove('text-white/80');
+
+            if (tabName === 'laporan') {
+                loadLaporan();
+            }
+        }
+
+        // Cari mahasiswa berdasarkan NIM
+        function cariMahasiswa(nim) {
+            return mahasiswaData.find(m => m.nim === nim);
+        }
+
+        // Handle form submissions
+        document.getElementById('mahasiswaForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const nim = document.getElementById('nim').value;
+            const keperluan = document.getElementById('keperluan').value;
+            const mahasiswa = cariMahasiswa(nim);
+            
+            if (!mahasiswa) {
+                showNotification('NIM tidak ditemukan dalam database!', 'error');
+                return;
+            }
+            
+            const absenData = {
+                tanggal: new Date().toLocaleDateString('id-ID'),
+                waktu: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                nama: mahasiswa.nama,
+                nim: nim,
+                prodi: mahasiswa.prodi,
+                fakultas: mahasiswa.fakultas,
+                jenis: 'Mahasiswa',
+                keperluan: keperluan,
+                timestamp: new Date()
+            };
+            
+            // Kirim ke Google Sheets
+            const success = await sendToGoogleSheets(absenData, 'mahasiswa');
+            
+            if (success) {
+                absensiData.push(absenData);
+                localStorage.setItem('absensiData', JSON.stringify(absensiData));
+                updateAbsenHariIni();
+                showSuccessModal('Absen mahasiswa berhasil dicatat!');
+                this.reset();
+                document.getElementById('mahasiswaInfo').classList.add('hidden');
+            }
+        });
+
+        document.getElementById('karyawanForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const nama = document.getElementById('namaKaryawan').value;
+            const departemen = document.getElementById('departemen').value;
+            const status = document.getElementById('statusKaryawan').value;
+            const keterangan = document.getElementById('keteranganKaryawan').value;
+            
+            const absenData = {
+                tanggal: new Date().toLocaleDateString('id-ID'),
+                waktu: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                nama: nama,
+                departemen: departemen,
+                status: status,
+                jenis: 'Karyawan',
+                keperluan: `Absen ${status}`,
+                keterangan: keterangan,
+                timestamp: new Date()
+            };
+            
+            // Kirim ke Google Sheets
+            const success = await sendToGoogleSheets(absenData, 'karyawan');
+            
+            if (success) {
+                absensiData.push(absenData);
+                localStorage.setItem('absensiData', JSON.stringify(absensiData));
+                showSuccessModal('Absen karyawan berhasil dicatat!');
+                this.reset();
+            }
+        });
+
+        document.getElementById('pengunjungForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const nama = document.getElementById('namaPengunjung').value;
+            const instansi = document.getElementById('asalInstansi').value;
+            const telepon = document.getElementById('noTelepon').value;
+            const keperluan = document.getElementById('keperluanPengunjung').value;
+            
+            const absenData = {
+                tanggal: new Date().toLocaleDateString('id-ID'),
+                waktu: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                nama: nama,
+                instansi: instansi,
+                telepon: telepon,
+                jenis: 'Pengunjung Luar',
+                keperluan: keperluan,
+                timestamp: new Date()
+            };
+            
+            // Kirim ke Google Sheets
+            const success = await sendToGoogleSheets(absenData, 'pengunjung');
+            
+            if (success) {
+                absensiData.push(absenData);
+                localStorage.setItem('absensiData', JSON.stringify(absensiData));
+                showSuccessModal('Kunjungan berhasil didaftarkan!');
+                this.reset();
+            }
+        });
+
+        // NIM input handler
+        document.getElementById('nim').addEventListener('input', function(e) {
+            const nim = e.target.value;
+            const mahasiswa = cariMahasiswa(nim);
+            const infoDiv = document.getElementById('mahasiswaInfo');
+            
+            if (mahasiswa) {
+                document.getElementById('mahasiswaNama').textContent = mahasiswa.nama;
+                document.getElementById('mahasiswaProdi').textContent = mahasiswa.prodi;
+                document.getElementById('mahasiswaFakultas').textContent = mahasiswa.fakultas;
+                infoDiv.classList.remove('hidden');
+            } else {
+                infoDiv.classList.add('hidden');
+            }
+        });
+
+        // Update absen hari ini
+        function updateAbsenHariIni() {
+            const today = new Date().toLocaleDateString('id-ID');
+            const absenHariIni = absensiData.filter(a => a.tanggal === today);
+            const container = document.getElementById('absenHariIni');
+            
+            if (absenHariIni.length === 0) {
+                container.innerHTML = '<p class="text-white/70 text-center">Belum ada absen hari ini</p>';
+                return;
+            }
+            
+            container.innerHTML = absenHariIni.map(absen => `
+                <div class="bg-white/10 rounded-lg p-3">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <div class="text-white font-semibold">${absen.nama}</div>
+                            <div class="text-white/70 text-sm">${absen.jenis} - ${absen.keperluan}</div>
+                        </div>
+                        <div class="text-white/80 text-sm">${absen.waktu}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Load laporan
+        function loadLaporan() {
+            updateStatistik();
+            displayLaporan(absensiData);
+        }
+
+        // Update statistik
+        function updateStatistik() {
+            const totalMahasiswa = absensiData.filter(a => a.jenis === 'Mahasiswa').length;
+            const totalKaryawan = absensiData.filter(a => a.jenis === 'Karyawan').length;
+            const totalPengunjung = absensiData.filter(a => a.jenis === 'Pengunjung Luar').length;
+            
+            document.getElementById('totalMahasiswa').textContent = totalMahasiswa;
+            document.getElementById('totalKaryawan').textContent = totalKaryawan;
+            document.getElementById('totalPengunjung').textContent = totalPengunjung;
+        }
+
+        // Display laporan
+        function displayLaporan(data) {
+            const tbody = document.getElementById('laporanTableBody');
+            
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Tidak ada data</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = data.map((absen, index) => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="px-4 py-3">${index + 1}</td>
+                    <td class="px-4 py-3">${absen.tanggal}</td>
+                    <td class="px-4 py-3">${absen.waktu}</td>
+                    <td class="px-4 py-3">${absen.nama}</td>
+                    <td class="px-4 py-3">
+                        <span class="px-2 py-1 rounded-full text-xs font-semibold ${
+                            absen.jenis === 'Mahasiswa' ? 'bg-blue-100 text-blue-800' :
+                            absen.jenis === 'Karyawan' ? 'bg-green-100 text-green-800' :
+                            'bg-purple-100 text-purple-800'
+                        }">
+                            ${absen.jenis}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3">${absen.keperluan}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Filter laporan
+        function filterLaporan() {
+            const tanggalDari = document.getElementById('filterTanggalDari').value;
+            const tanggalSampai = document.getElementById('filterTanggalSampai').value;
+            const jenisFilter = document.getElementById('filterJenis').value;
+            const sourceFilter = document.getElementById('filterSource').value;
+            
+            let filteredData = absensiData;
+            
+            if (tanggalDari) {
+                filteredData = filteredData.filter(a => {
+                    const tanggalAbsen = new Date(a.timestamp);
+                    return tanggalAbsen >= new Date(tanggalDari);
+                });
+            }
+            
+            if (tanggalSampai) {
+                filteredData = filteredData.filter(a => {
+                    const tanggalAbsen = new Date(a.timestamp);
+                    return tanggalAbsen <= new Date(tanggalSampai + 'T23:59:59');
+                });
+            }
+            
+            if (jenisFilter) {
+                filteredData = filteredData.filter(a => a.jenis === jenisFilter);
+            }
+            
+            if (sourceFilter) {
+                if (sourceFilter === 'current') {
+                    filteredData = filteredData.filter(a => !a.source);
+                } else {
+                    filteredData = filteredData.filter(a => a.source === sourceFilter);
+                }
+            }
+            
+            displayLaporan(filteredData);
+            updateStatistikFiltered(filteredData);
+            
+            // Update periode untuk print
+            const periode = tanggalDari && tanggalSampai ? 
+                `${new Date(tanggalDari).toLocaleDateString('id-ID')} - ${new Date(tanggalSampai).toLocaleDateString('id-ID')}` :
+                'Semua Data';
+            document.getElementById('printPeriode').textContent = periode;
+        }
+
+        // Update statistik berdasarkan data yang difilter
+        function updateStatistikFiltered(data) {
+            const totalMahasiswa = data.filter(a => a.jenis === 'Mahasiswa').length;
+            const totalKaryawan = data.filter(a => a.jenis === 'Karyawan').length;
+            const totalPengunjung = data.filter(a => a.jenis === 'Pengunjung Luar').length;
+            
+            document.getElementById('totalMahasiswa').textContent = totalMahasiswa;
+            document.getElementById('totalKaryawan').textContent = totalKaryawan;
+            document.getElementById('totalPengunjung').textContent = totalPengunjung;
+        }
+
+        // Update filter source options
+        function updateSourceFilterOptions() {
+            const sourceFilter = document.getElementById('filterSource');
+            const currentOptions = sourceFilter.innerHTML;
+            
+            // Add imported sources to filter options
+            let newOptions = `
+                <option value="">Semua Sumber</option>
+                <option value="current">Data Saat Ini</option>
+            `;
+            
+            importedDataSources.forEach(source => {
+                newOptions += `<option value="${source.name}">${source.name}</option>`;
+            });
+            
+            sourceFilter.innerHTML = newOptions;
+        }
+
+        // Export to Excel
+        function exportToExcel() {
+            const data = absensiData.map((absen, index) => ({
+                'No': index + 1,
+                'Tanggal': absen.tanggal,
+                'Waktu': absen.waktu,
+                'Nama': absen.nama,
+                'Jenis': absen.jenis,
+                'Keperluan': absen.keperluan
+            }));
+            
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Laporan Absensi');
+            
+            const fileName = `Laporan_Absensi_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+        }
+
+        // Print report
+        function printReport() {
+            window.print();
+        }
+
+        // Show success modal
+        function showSuccessModal(message) {
+            document.getElementById('successMessage').textContent = message;
+            document.getElementById('successModal').classList.remove('hidden');
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('successModal').classList.add('hidden');
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSettings();
+            loadSheetsConfig();
+            loadMahasiswaData();
+            updateTime();
+            setInterval(updateTime, 1000);
+            
+            // Load saved data from localStorage
+            const savedAbsensiData = localStorage.getItem('absensiData');
+            if (savedAbsensiData) {
+                absensiData = JSON.parse(savedAbsensiData);
+                // Convert timestamp strings back to Date objects
+                absensiData.forEach(item => {
+                    if (typeof item.timestamp === 'string') {
+                        item.timestamp = new Date(item.timestamp);
+                    }
+                });
+            }
+            
+            const savedImportedSources = localStorage.getItem('importedDataSources');
+            if (savedImportedSources) {
+                importedDataSources = JSON.parse(savedImportedSources);
+                // Convert date strings back to Date objects
+                importedDataSources.forEach(source => {
+                    if (typeof source.importDate === 'string') {
+                        source.importDate = new Date(source.importDate);
+                    }
+                });
+            }
+            
+            // Set default dates for filter
+            const today = new Date();
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+            document.getElementById('filterTanggalDari').value = firstDay.toISOString().split('T')[0];
+            document.getElementById('filterTanggalSampai').value = today.toISOString().split('T')[0];
+            
+            // Update source filter options
+            updateSourceFilterOptions();
+            
+            // Handle import form submission
+            document.getElementById('importForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const name = document.getElementById('importName').value;
+                const url = document.getElementById('importUrl').value;
+                const type = document.getElementById('importType').value;
+                
+                // Validasi URL CSV
+                if (!url.includes('docs.google.com') || !url.includes('output=csv')) {
+                    showNotification('URL harus berupa link CSV dari Google Sheets yang berakhiran dengan &output=csv', 'error');
+                    return;
+                }
+                
+                const success = await importDataFromCSV(url, name, type);
+                
+                if (success) {
+                    this.reset();
+                    closeImportModal();
+                }
+            });
+        });
+
+        // Add some sample data for demonstration
+        setTimeout(() => {
+            absensiData.push(
+                {
+                    tanggal: new Date().toLocaleDateString('id-ID'),
+                    waktu: '08:30',
+                    nama: 'Ahmad Rizki',
+                    nim: '2021001',
+                    prodi: 'Teknik Informatika',
+                    jenis: 'Mahasiswa',
+                    keperluan: 'Membaca Buku',
+                    timestamp: new Date()
+                },
+                {
+                    tanggal: new Date().toLocaleDateString('id-ID'),
+                    waktu: '09:15',
+                    nama: 'Dr. Siti Aminah',
+                    jabatan: 'Pustakawan',
+                    jenis: 'Karyawan',
+                    keperluan: 'Absen Masuk',
+                    timestamp: new Date()
+                }
+            );
+            updateAbsenHariIni();
+        }, 1000);
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'977119e67546899b',t:'MTc1NjUyMzQ5MC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
